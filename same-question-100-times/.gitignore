@@ -1,0 +1,18 @@
+# secrets -- .env holds real keys and must never be committed.
+.env
+.env.*
+!.env.example
+# direnv: .envrc is committed and must stay secret-free. Any local override goes
+# in .envrc.local, which is not.
+.envrc.local
+
+# python
+.venv/
+__pycache__/
+*.pyc
+*.pyo
+.ruff_cache/
+
+# experiment output is regenerated from a run, not committed
+results/*.jsonl
+results/*.labels.jsonl

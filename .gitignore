@@ -1,0 +1,25 @@
+# secrets
+.env
+.env.*
+!.env.example
+
+# python
+__pycache__/
+*.pyc
+*.pyo
+.venv/
+.ruff_cache/
+
+# local agent scratch and working notes. Never published.
+.claude/
+docs/
+# Implementation plans are working notes for an agent, not documentation, and
+# they routinely reference work that is not meant to be public. Listed
+# explicitly as well as under docs/ so the intent survives any edit above.
+docs/plans/
+**/docs/plans/
+/acme-hvac-retell-prompt.md
+
+# experiment output is regenerated from a run, not committed
+results/*.jsonl
+results/*.labels.jsonl

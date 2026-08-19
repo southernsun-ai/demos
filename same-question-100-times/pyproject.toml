@@ -1,0 +1,37 @@
+[project]
+name = "same-question-100-times"
+version = "0.1.0"
+description = "Run one customer support question through an LLM agent 100 times and count how often it invents a policy"
+readme = "README.md"
+requires-python = ">=3.13"
+license = { text = "MIT" }
+authors = [{ name = "Gabriel Alexander" }]
+dependencies = [
+    "pydantic-ai-slim[anthropic,google,openai,logfire]>=2.32.0",
+    "logfire>=4.32.0",
+    "matplotlib>=3.9",
+    "typer>=0.15",
+    "python-dotenv>=1.2.2",
+    "pydantic-evals>=2.32.0",
+]
+
+[dependency-groups]
+dev = ["ruff>=0.9"]
+
+[project.scripts]
+fernpost = "fernpost.cli:app"
+
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[tool.hatch.build.targets.wheel]
+packages = ["src/fernpost"]
+
+[tool.ruff]
+line-length = 100
+
+[tool.ruff.lint.per-file-ignores]
+# Typer declares CLI options as call-valued defaults. That is the framework's
+# documented idiom, not an accident.
+"src/fernpost/cli.py" = ["B008"]
