@@ -25,7 +25,8 @@ smoke:
 	PYDANTIC_AI_NO_BANNER=1 $(PY) eval_modes.py --offline --repeats 1 | head -20
 
 check-key:
-	@test -n "$$ANTHROPIC_API_KEY" || (echo "ANTHROPIC_API_KEY is not set. Add it to .env (see .env.example)." && exit 1)
+	@test -n "$$PYDANTIC_AI_GATEWAY_API_KEY" -o -n "$$ANTHROPIC_API_KEY" || \
+		(echo "Set PYDANTIC_AI_GATEWAY_API_KEY (gateway) or ANTHROPIC_API_KEY (direct) in .env" && exit 1)
 
 serve: check-key
 	PYDANTIC_AI_NO_BANNER=1 $(PY) -m uvicorn server:app --port $(PORT)
