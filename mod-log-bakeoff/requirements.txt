@@ -1,0 +1,9 @@
+pydantic-ai-slim[anthropic]>=2.57
+pydantic-evals>=2.57
+duckdb>=1.5
+fastapi>=0.115
+uvicorn[standard]>=0.30
+httpx>=0.27
+pytest>=8
+# optional: tracing for agent runs and evals
+# logfire>=4

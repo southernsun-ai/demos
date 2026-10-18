@@ -1,0 +1,351 @@
+<title>Mod Log Bake-off</title>
+<meta name="claude:viewport-fit-sides" content="cover">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500;600&family=IBM+Plex+Sans+Condensed:wght@600;700&family=IBM+Plex+Sans:wght@400;500;600&display=swap">
+<style>
+/* Layout: one decision page. Sticky run bar → verdict → decision table → why (speed, failures). */
+:root{
+  --bg:#F2F3EF; --panel:#FFFFFF; --sunk:#F6F7F3; --ink:#15181C; --muted:#565C66; --line:#DCDFD8;
+  --pass:#2E6BC0; --pass-soft:#A9C3E9; --fail:#C9661A; --fail-soft:#F1C8A3; --pending:#E6E8E2;
+  --haiku:#3F9478; --sonnet:#6A4DC2; --opus:#20283A; --hi:#FFF3D6; --hi-ink:#6B4A06;
+  --f-display:"IBM Plex Sans Condensed","Arial Narrow",system-ui,sans-serif;
+  --f-body:"IBM Plex Sans",system-ui,-apple-system,"Segoe UI",sans-serif;
+  --f-mono:"IBM Plex Mono",ui-monospace,SFMono-Regular,Menlo,monospace;
+}
+@media (prefers-color-scheme: dark){:root:not([data-theme="light"]){
+  --bg:#111418; --panel:#191D23; --sunk:#15191E; --ink:#E8EAEE; --muted:#A3AAB5; --line:#2C323B;
+  --pass:#6A9EEA; --pass-soft:#2E4A73; --fail:#F0964D; --fail-soft:#6A4325; --pending:#262B33;
+  --haiku:#5DC3A0; --sonnet:#A28CF0; --opus:#C7D1E6; --hi:#3A2F14; --hi-ink:#F5D589; color-scheme:dark}}
+:root[data-theme="dark"]{
+  --bg:#111418; --panel:#191D23; --sunk:#15191E; --ink:#E8EAEE; --muted:#A3AAB5; --line:#2C323B;
+  --pass:#6A9EEA; --pass-soft:#2E4A73; --fail:#F0964D; --fail-soft:#6A4325; --pending:#262B33;
+  --haiku:#5DC3A0; --sonnet:#A28CF0; --opus:#C7D1E6; --hi:#3A2F14; --hi-ink:#F5D589; color-scheme:dark}
+*{box-sizing:border-box}
+body{background:var(--bg);color:var(--ink);font:14px/1.5 var(--f-body)}
+body::before{content:"";position:fixed;inset:0 0 auto;height:env(safe-area-inset-top,0px);z-index:10;background:var(--panel)}
+.in{max-width:1280px;margin:0 auto;padding-left:max(16px,env(safe-area-inset-left,0px));padding-right:max(16px,env(safe-area-inset-right,0px))}
+.bar{position:sticky;top:env(safe-area-inset-top,0px);z-index:5;background:var(--panel);border-bottom:1px solid var(--line)}
+.bar .in{padding-block:12px;display:flex;flex-wrap:wrap;gap:10px 20px;align-items:center}
+h1{font:700 21px/1.1 var(--f-display);margin:0}
+h2{font:600 16px/1.2 var(--f-display);margin:0;text-wrap:balance}
+.sub{color:var(--muted);font-size:13px}
+.mono,.num{font-family:var(--f-mono);font-variant-numeric:tabular-nums}
+.run{display:flex;flex-direction:column;gap:4px;flex:1 1 320px;min-width:0}
+.track{height:6px;border-radius:3px;background:var(--pending);overflow:hidden}
+.fill{height:100%;background:var(--ink)}
+.ctrls{display:flex;flex-wrap:wrap;gap:6px;align-items:center}
+.btn{border:1px solid var(--line);background:var(--panel);color:var(--ink);font:600 13px var(--f-body);padding:7px 12px;border-radius:6px;cursor:pointer;min-height:36px}
+.btn.primary{background:var(--ink);color:var(--panel);border-color:var(--ink)}
+.chip{border:1px solid var(--line);background:var(--panel);color:var(--muted);font:500 12px var(--f-mono);padding:5px 10px;border-radius:999px;cursor:pointer;min-height:32px}
+.chip[aria-pressed="true"]{background:var(--ink);color:var(--panel);border-color:var(--ink)}
+button:focus-visible{outline:2px solid var(--pass);outline-offset:2px}
+.mock{font-size:12px;color:var(--hi-ink);background:var(--hi);padding:4px 8px;border-radius:4px}
+.page{display:grid;grid-template-columns:repeat(12,minmax(0,1fr));gap:16px;padding-block:16px 48px}
+.panel{background:var(--panel);border:1px solid var(--line);border-radius:10px;padding:16px;min-width:0;display:flex;flex-direction:column;gap:12px}
+.s12{grid-column:span 12}.s7{grid-column:span 7}.s5{grid-column:span 5}.s8{grid-column:span 8}.s4{grid-column:span 4}
+@media (max-width:960px){.s7,.s5,.s8,.s4{grid-column:span 12}}
+.phead{display:flex;flex-wrap:wrap;gap:8px 16px;align-items:baseline;justify-content:space-between}
+.verdict{font:600 19px/1.35 var(--f-display);text-wrap:balance}
+.verdict em{font-style:normal;background:var(--hi);color:var(--hi-ink);padding:0 4px;border-radius:3px}
+.scroll{overflow-x:auto}
+table{width:100%;border-collapse:collapse;font-size:13px}
+th{font:600 12px var(--f-body);color:var(--muted);text-align:left;padding:8px;border-bottom:1px solid var(--line);white-space:nowrap}
+td{padding:9px 8px;border-bottom:1px solid var(--line);white-space:nowrap;vertical-align:middle}
+td.n,th.n{text-align:right;font-family:var(--f-mono);font-variant-numeric:tabular-nums}
+tr.rec td{background:var(--hi)}
+tr.rec td:first-child{box-shadow:inset 3px 0 0 var(--hi-ink)}
+.who{display:flex;align-items:center;gap:8px;font-weight:600}
+.dot{width:10px;height:10px;border-radius:50%;flex:none;display:inline-block}
+.tag{font:600 10px var(--f-mono);text-transform:uppercase;letter-spacing:.05em;padding:2px 6px;border-radius:4px;background:var(--pending);color:var(--muted)}
+.tag.rec{background:var(--hi-ink);color:var(--panel)}
+.tag.tie{background:transparent;border:1px solid var(--muted)}
+.ci{position:relative;width:200px;height:18px}
+.ci .axis{position:absolute;inset:8px 0 auto;height:2px;background:var(--pending)}
+.ci .range{position:absolute;top:5px;height:8px;border-radius:4px;opacity:.35}
+.ci .pt{position:absolute;top:3px;width:4px;height:12px;border-radius:2px;margin-left:-2px}
+.ci .tgt{position:absolute;top:0;bottom:0;width:0;border-left:1.5px dashed var(--muted)}
+.spark{display:block}
+.hm{display:grid;gap:3px;min-width:720px}
+.hm .h{font:600 11px var(--f-mono);color:var(--muted);text-align:center;line-height:1.25;padding-bottom:4px}
+.hm .rl{font:12px var(--f-mono);padding:6px 8px 6px 0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.hm .grp{grid-column:1/-1;font:600 11px var(--f-body);text-transform:uppercase;letter-spacing:.06em;color:var(--muted);padding:10px 0 4px}
+.cell{border:0;font:600 11px var(--f-mono);border-radius:3px;padding:6px 0;cursor:pointer;min-height:28px}
+.cell[aria-pressed="true"]{outline:2px solid var(--ink);outline-offset:1px}
+.c3{background:var(--pass);color:var(--panel)}.c2{background:var(--pass-soft);color:var(--ink)}.c1{background:var(--fail-soft);color:var(--ink)}.c0{background:var(--fail);color:var(--panel)}.cn{background:var(--pending);color:var(--muted);cursor:default}
+.legend{display:flex;flex-wrap:wrap;gap:6px 14px;font-size:12px;color:var(--muted)}
+.legend i{display:inline-block;width:10px;height:10px;border-radius:2px;margin-right:6px;vertical-align:-1px}
+.drill{display:grid;grid-template-columns:repeat(auto-fit,minmax(260px,1fr));gap:12px}
+.rep{border:1px solid var(--line);border-radius:8px;padding:12px;display:flex;flex-direction:column;gap:6px;font-size:13px;min-width:0}
+.res{font:600 11px var(--f-mono);padding:2px 6px;border-radius:4px}
+.res.p{background:var(--pass);color:var(--panel)}.res.f{background:var(--fail);color:var(--panel)}
+.code{font:12px/1.5 var(--f-mono);background:var(--sunk);border:1px solid var(--line);border-radius:6px;padding:8px 10px;overflow-x:auto;white-space:pre}
+.seq{display:flex;flex-wrap:wrap;gap:4px;align-items:center;font-size:12px}
+.seq code{font:500 11px var(--f-mono);background:var(--sunk);border:1px solid var(--line);padding:1px 6px;border-radius:4px}
+.stack{display:flex;height:14px;border-radius:3px;overflow:hidden;background:var(--pending)}
+.flight{display:grid;grid-template-columns:repeat(auto-fill,minmax(180px,1fr));gap:6px}
+.fl{font:12px var(--f-mono);border:1px solid var(--line);border-radius:6px;padding:6px 8px;display:flex;justify-content:space-between;gap:8px;min-width:0}
+.fl span:first-child{overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.up{color:var(--pass);font-weight:600}.down{color:var(--fail);font-weight:600}
+svg text{fill:var(--muted);font:11px var(--f-mono)}
+.note{font-size:12px;color:var(--muted)}
+</style>
+
+<div class="bar"><div class="in">
+  <div style="display:flex;flex-direction:column;gap:2px">
+    <h1>Mod Log Bake-off</h1>
+    <span class="sub mono">3 models @ medium × 3 modes · 16 questions × 3 repeats</span>
+  </div>
+  <div class="run">
+    <div class="track"><div class="fill" id="fill" style="width:0"></div></div>
+    <span class="sub num" id="runline"></span>
+  </div>
+  <div class="ctrls">
+    <span class="mock">Simulated data</span>
+    <button class="btn primary" id="play">Play</button>
+    <button class="chip" data-speed="5" aria-pressed="false">5×</button>
+    <button class="chip" data-speed="20" aria-pressed="true">20×</button>
+    <button class="chip" data-speed="60" aria-pressed="false">60×</button>
+    <button class="btn" id="jump">Jump to end</button>
+    <button class="btn" id="reset">Reset</button>
+  </div>
+</div></div>
+
+<div class="in"><main class="page" id="page"></main></div>
+
+<script>
+/* ===== simulated runs (illustrative) ===== */
+function rng(seed){return function(){seed|=0;seed=seed+0x6D2B79F5|0;let t=Math.imul(seed^seed>>>15,1|seed);t=t+Math.imul(t^t>>>7,61|t)^t;return((t^t>>>14)>>>0)/4294967296}}
+const R=rng(20261018), jit=(a,b)=>a+(b-a)*R();
+const MODELS=[
+  {id:"haiku",label:"Haiku 5.5",call:430,think:360,tps:190,f:1.4,retry:.09},
+  {id:"sonnet",label:"Sonnet 5.5",call:720,think:640,tps:120,f:.8,retry:.05},
+  {id:"opus",label:"Opus 5.5",call:1120,think:980,tps:80,f:.5,retry:.03}];
+const MODES=[{id:"typed",label:"Typed tools",s:"T"},{id:"sql",label:"SQL + schema",s:"S"},{id:"discover",label:"SQL + discovery",s:"D"}];
+const ACC={haiku:{typed:[.93,.05],sql:[.87,.80],discover:[.84,.74]},sonnet:{typed:[.97,.06],sql:[.96,.91],discover:[.95,.89]},opus:{typed:[.98,.06],sql:[.98,.94],discover:[.97,.93]}};
+const CASES=[
+ ["total_bans",1,.02,1,"There are 69 bans in the log.","There are 68 bans in the log.","SELECT count(*) FROM events WHERE action_taken='ban'"],
+ ["top_banner",1,.03,0,"Mara issued the most bans: 22.","Kestrel issued the most bans: 18.","SELECT mod_username, count(*) FROM events WHERE action_taken='ban'\nGROUP BY 1 ORDER BY 2 DESC LIMIT 1"],
+ ["mara_oct_bans",1,.07,0,"Mara issued 6 bans in October 2026.","Mara issued 22 bans in October 2026.","SELECT count(*) FROM events\nWHERE action_taken='ban' AND mod_username='Mara' AND ts >= '2026-10-01'"],
+ ["top_channel_actions",1,.05,0,"#off-topic had the most mod actions: 367.","#general had the most mod actions: 359.","SELECT channel_name, count(*) FROM events WHERE action_taken <> 'none'\nGROUP BY 1 ORDER BY 2 DESC LIMIT 1"],
+ ["top_offender",1,.05,0,"grumpy_r178 received the most mod actions: 10.","grumpy_r178 received the most mod actions: 9.","SELECT author_username, count(*) FROM events WHERE action_taken <> 'none'\nGROUP BY 1 ORDER BY 2 DESC LIMIT 1"],
+ ["kicks_week",1,.11,0,"9 kicks happened from 2026-09-07 to 2026-09-13.","8 kicks happened from 2026-09-07 to 2026-09-13.","SELECT count(*) FROM events\nWHERE action_taken='kick' AND ts >= '2026-09-07' AND ts < '2026-09-13'"],
+ ["timeout_reason",1,.04,0,"The most common timeout reason is \"flooding the chat\".","The most common timeout reason is \"repeated self-promo links\".","SELECT reason, count(*) FROM events WHERE action_taken='timeout'\nGROUP BY 1 ORDER BY 2 DESC LIMIT 1"],
+ ["sept_warner",1,.06,0,"Mara issued the most warnings in September 2026: 44.","Doug issued the most warnings in September 2026: 41.","SELECT mod_username, count(*) FROM events\nWHERE action_taken='warn' AND month(ts)=9 GROUP BY 1 ORDER BY 2 DESC LIMIT 1"],
+ ["ines_games",1,.05,0,"Ines took 81 mod actions in #games.","Ines took 349 mod actions in #games.","SELECT count(*) FROM events\nWHERE mod_username='Ines' AND channel_name='#games' AND action_taken <> 'none'"],
+ ["grumpy_last_timeout",1,.08,0,"Kestrel last timed out grumpy_r178 for \"repeated self-promo links\".","Ines last timed out grumpy_r178 for \"repeated self-promo links\".","SELECT reason, mod_username FROM events\nWHERE author_username='grumpy_r178' AND action_taken='timeout' ORDER BY ts DESC LIMIT 1"],
+ ["edited_count",0,.03,0,"1,089 messages were edited.","1,088 messages were edited.","SELECT count(edited_at) FROM events"],
+ ["with_attachments",0,.05,0,"1,300 messages have at least one attachment.","There are 2,611 attachments in total.","SELECT count(*) FROM events WHERE attachment_count > 0"],
+ ["peak_hour",0,.10,0,"19:00 UTC has the most mod actions: 72.","20:00 UTC has the most mod actions: 70.","SELECT hour(ts), count(*) FROM events WHERE action_taken <> 'none'\nGROUP BY 1 ORDER BY 2 DESC LIMIT 1"],
+ ["distinct_actioned",0,.07,0,"480 distinct users received at least one mod action.","500 distinct users received at least one mod action.","SELECT count(DISTINCT author_username) FROM events WHERE action_taken <> 'none'"],
+ ["warn_then_ban",0,.22,0,"15 users were warned and later banned.","18 users were warned and banned.","SELECT count(DISTINCT w.author_username) FROM events w\nJOIN events b ON b.author_username = w.author_username\n AND b.ts > w.ts AND b.action_taken = 'ban'\nWHERE w.action_taken = 'warn'"],
+ ["edited_within_5m",0,.18,0,"17 messages were edited within 5 minutes.","21 messages were edited within 5 minutes.","SELECT count(*) FROM events WHERE edited_at <= ts + INTERVAL 5 MINUTE"]
+].map(([id,cap,diff,summary,exp,wrong,sql])=>({id,cap:!!cap,diff,summary:!!summary,exp,wrong,sql}));
+const REPEATS=3, CONCURRENCY=8, PER_MODEL=4;
+const COMBOS=[];MODELS.forEach(m=>MODES.forEach(o=>COMBOS.push({key:m.id+"/"+o.id,m,o})));
+
+function simulate(m,o,c,rep){
+  const typedBeyond=o.id==="typed"&&!c.cap;
+  const pass=R()<(ACC[m.id][o.id][c.cap?0:1]-c.diff*m.f);
+  let tools=[];
+  if(o.id==="typed"){if(!c.summary)tools=[typedBeyond||c.id==="grumpy_last_timeout"?"find_events":"aggregate_events"]}
+  else if(o.id==="sql")tools=["run_sql"];
+  else tools=(R()<.3?[]:["list_tables"]).concat(["describe_table","run_sql"]);
+  let retries=0;if(o.id!=="typed"&&R()<m.retry+c.diff*.4){retries=1;tools.push("run_sql")}
+  let error=null;
+  if(m.id==="haiku"&&o.id==="discover"&&c.id==="warn_then_ban"&&rep===2){error="UsageLimitExceeded: request_limit of 10";tools=tools.concat(["run_sql","run_sql","run_sql","run_sql"]);retries=4}
+  const calls=tools.length+1, toolMs={aggregate_events:9,find_events:12,run_sql:14,describe_table:58,list_tables:3};
+  let t=0,firstThink=null,firstTool=null,inTok=0,outTok=0;const prefix={typed:2150,sql:1720,discover:1080}[o.id];
+  const st={wait:0,think:0,tools:0};
+  for(let k=0;k<calls;k++){
+    const ttfb=m.call*jit(.8,1.35);t+=ttfb;if(firstThink===null){firstThink=t;st.wait=ttfb}else st.tools+=ttfb;
+    const th=m.think*jit(.55,1.25)*(.6+c.diff*3)*(k===calls-1?.7:1);t+=th;st.think+=th;
+    inTok+=prefix+k*420+(tools.slice(0,k).includes("describe_table")?1150:0);outTok+=Math.round(th/1000*m.tps);
+    if(k<calls-1){if(firstTool===null)firstTool=t;const a=(tools[k]==="run_sql"?55:20)/m.tps*1000+toolMs[tools[k]];t+=a;st.tools+=a;outTok+=tools[k]==="run_sql"?55:20}
+  }
+  const ttft=t, ans=jit(55,140), total=t+ans/m.tps*1000;outTok+=Math.round(ans);st.stream=total-ttft;
+  const answer=error?"":pass?c.exp:typedBeyond?"The available tools can't filter on that field, so I can't give an exact count.":c.wrong;
+  const sql=o.id==="typed"?[]:tools.filter(x=>x==="run_sql").map((_,i,a)=>i<a.length-1?c.sql.replace("FROM events","FROM evnts"):c.sql);
+  const throttled=R()<.035;
+  return {combo:m.id+"/"+o.id,model:m.id,mode:o.id,case:c.id,cap:c.cap,rep,pass:pass&&!error,error,tools,retries,calls,ttft,total,stage:st,tok:inTok+outTok,answer,sql,expected:c.exp,throttled};
+}
+const RUNS=[];COMBOS.forEach(cb=>{for(let r=0;r<REPEATS;r++)CASES.forEach(c=>RUNS.push(simulate(cb.m,cb.o,c,r)))});
+const TOTAL=RUNS.length;
+// Interleave runs randomly so load and time-of-day drift hit every setup equally.
+const ORDER=RUNS.map((_,i)=>i);for(let i=ORDER.length-1;i>0;i--){const j=Math.floor(R()*(i+1));[ORDER[i],ORDER[j]]=[ORDER[j],ORDER[i]]}
+
+/* ===== scheduler: 8 in flight, max 4 per model; 429s back off and retry ===== */
+let SIM;
+function resetSim(){SIM={now:0,queue:ORDER.slice(),flight:[],done:[],throttles:0}}
+function advance(dt){
+  const end=SIM.now+dt;
+  while(true){
+    // fill free slots
+    let started=true;
+    while(started&&SIM.flight.length<CONCURRENCY&&SIM.queue.length){started=false;
+      for(let qi=0;qi<SIM.queue.length;qi++){const r=RUNS[SIM.queue[qi]];if(SIM.flight.filter(f=>RUNS[f.i].model===r.model).length<PER_MODEL){
+        const back=r.throttled?jit(800,2200):0;if(r.throttled)SIM.throttles++;
+        SIM.flight.push({i:SIM.queue[qi],start:SIM.now,end:SIM.now+back+r.total,back});SIM.queue.splice(qi,1);started=true;break}}}
+    if(!SIM.flight.length)break;
+    const next=Math.min(...SIM.flight.map(f=>f.end));if(next>end)break;
+    SIM.now=next;const fin=SIM.flight.filter(f=>f.end<=next);SIM.flight=SIM.flight.filter(f=>f.end>next);fin.forEach(f=>SIM.done.push(f.i));
+  }
+  SIM.now=Math.max(SIM.now,Math.min(end,SIM.flight.length?Infinity:SIM.now));if(SIM.flight.length)SIM.now=end;
+}
+
+/* ===== stats ===== */
+const pct=(xs,p)=>{xs=xs.filter(x=>x!=null).sort((a,b)=>a-b);if(!xs.length)return null;return xs[Math.max(0,Math.min(xs.length-1,Math.round(p/100*(xs.length-1))))]};
+const mean=xs=>xs.length?xs.reduce((a,b)=>a+b,0)/xs.length:null;
+const wilson=(k,n,z=1.96)=>{if(!n)return[0,1];const p=k/n,d=1+z*z/n,c=p+z*z/(2*n),h=z*Math.sqrt(p*(1-p)/n+z*z/(4*n*n));return[(c-h)/d,(c+h)/d]};
+const ms=v=>v==null?"–":v>=1000?(v/1000).toFixed(1)+" s":Math.round(v)+" ms";
+const pc=v=>v==null?"–":Math.round(v*100)+"%";
+const kfmt=v=>v==null?"–":(v/1000).toFixed(1)+"k";
+function stats(rs){
+  const n=rs.length,k=rs.filter(r=>r.pass).length,ci=wilson(k,n);
+  const g={};rs.forEach(r=>(g[r.case]=g[r.case]||[]).push(r.pass));const full=Object.values(g).filter(x=>x.length===REPEATS);
+  const med=f=>pct(rs.map(f),50);
+  return {n,k,acc:n?k/n:null,lo:ci[0],hi:ci[1],all3:full.length?full.filter(x=>x.every(Boolean)).length/full.length:null,
+    p50:med(r=>r.total),p95:pct(rs.map(r=>r.total),95),ttft:med(r=>r.ttft),tok:mean(rs.map(r=>r.tok)),errors:rs.filter(r=>r.error).length,
+    stage:{wait:med(r=>r.stage.wait),think:med(r=>r.stage.think),tools:med(r=>r.stage.tools),stream:med(r=>r.stage.stream)}};
+}
+const col=m=>`var(--${m})`, mL=id=>MODELS.find(m=>m.id===id).label, oL=id=>MODES.find(o=>o.id===id).label;
+const label=key=>{const[m,o]=key.split("/");return mL(m)+" · "+oL(o)};
+const esc=s=>String(s).replace(/[&<>"]/g,c=>({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;"}[c]));
+
+/* previous saved runs, for the trend + baseline columns (simulated) */
+const FINAL=Object.fromEntries(COMBOS.map(cb=>[cb.key,stats(RUNS.filter(r=>r.combo===cb.key))]));
+const HR=rng(9);
+const PAST=["Oct 12","Oct 14","Oct 16","Oct 17"].map((d,i)=>({date:d,acc:Object.fromEntries(COMBOS.map(cb=>[cb.key,Math.max(0,Math.min(1,FINAL[cb.key].acc-.06+i*.018+(HR()-.5)*.05))])),
+  p50:Object.fromEntries(COMBOS.map(cb=>[cb.key,FINAL[cb.key].p50*(1.08-i*.02+(HR()-.5)*.08)]))}));
+
+/* ===== state + render ===== */
+const S={playing:false,speed:20,target:.9,sel:null,base:3};
+resetSim();advance(60000); // open mid-run so the first frame shows the page working
+let timer=null;const $=s=>document.querySelector(s);
+
+function ciBar(st,color){
+  if(!st.n)return `<div class="ci"><div class="axis"></div></div>`;
+  const X=v=>Math.max(0,Math.min(100,(v-.5)/.5*100));
+  return `<div class="ci" title="${pc(st.acc)} (95% CI ${pc(st.lo)}–${pc(st.hi)}, n=${st.n})"><div class="axis"></div>
+    <div class="range" style="left:${X(st.lo)}%;width:${X(st.hi)-X(st.lo)}%;background:${color}"></div>
+    <div class="tgt" style="left:${X(S.target)}%"></div><div class="pt" style="left:${X(st.acc)}%;background:${color}"></div></div>`;
+}
+function spark(vals,color){const W=84,H=22,lo=Math.min(...vals),hi=Math.max(...vals);
+  const pts=vals.map((v,i)=>[3+i*(W-6)/(vals.length-1),H-3-(hi-lo<1e-6?.5:(v-lo)/(hi-lo))*(H-6)]);
+  return `<svg class="spark" viewBox="0 0 ${W} ${H}" width="${W}" height="${H}" aria-hidden="true"><polyline points="${pts.map(p=>p.join(",")).join(" ")}" style="fill:none;stroke:${color};stroke-width:1.5"/><circle cx="${pts.at(-1)[0]}" cy="${pts.at(-1)[1]}" r="2.5" style="fill:${color}"/></svg>`}
+
+function render(){
+  const done=SIM.done.map(i=>RUNS[i]), finished=done.length===TOTAL;
+  const rows=COMBOS.map(cb=>{const rs=done.filter(r=>r.combo===cb.key);return{...cb,st:stats(rs),flying:SIM.flight.filter(f=>RUNS[f.i].combo===cb.key).length}});
+  // recommendation: among setups that clear the target and can't be ruled out as the most accurate, pick the fastest.
+  const ready=rows.filter(r=>r.st.n>=12);
+  const best=ready.slice().sort((a,b)=>b.st.acc-a.st.acc)[0];
+  const tied=best?ready.filter(r=>r.st.hi>=best.st.acc):[];
+  const eligible=tied.filter(r=>r.st.acc>=S.target);
+  const rec=(eligible.length?eligible:tied).slice().sort((a,b)=>a.st.p50-b.st.p50)[0];
+  const widest=ready.length?Math.max(...ready.map(r=>(r.st.hi-r.st.lo)/2)):1;
+
+  // run bar
+  const thru=SIM.now?done.length/(SIM.now/1000):0, eta=thru?(TOTAL-done.length)/thru*1000:null;
+  $("#fill").style.width=(done.length/TOTAL*100)+"%";
+  $("#runline").textContent=finished?`Finished · ${TOTAL} runs in ${ms(SIM.now)} · ${SIM.throttles} rate-limit retries`:
+    `${done.length} / ${TOTAL} runs · ${SIM.flight.length} in flight · ${ms(SIM.now)} elapsed · ~${ms(eta)} left · ${SIM.throttles} rate-limit retries`;
+  $("#play").textContent=S.playing?"Pause":finished?"Replay":"Play";
+  document.querySelectorAll("[data-speed]").forEach(b=>b.setAttribute("aria-pressed",+b.dataset.speed===S.speed));
+
+  // verdict
+  let verdict;
+  if(!rec)verdict=`Too early to call. Each setup needs at least 12 finished runs.`;
+  else{
+    const others=tied.filter(r=>r!==rec);
+    const slower=others.length?others.slice().sort((a,b)=>b.st.acc-a.st.acc)[0]:null;
+    verdict=`${finished?"Pick":"Leaning"} <em>${label(rec.key)}</em>: ${pc(rec.st.acc)} accurate (${pc(rec.st.lo)}–${pc(rec.st.hi)}), ${ms(rec.st.p50)} median.`+
+      (slower&&slower.st.p50>rec.st.p50?` ${label(slower.key)} isn't measurably more accurate and is ${(slower.st.p50/rec.st.p50).toFixed(1)}× slower.`:"")+
+      (eligible.length?"":` Nothing clears the ${pc(S.target)} target yet.`);
+  }
+  const verdictNote=finished?`Rule: of the setups whose 95% interval reaches the top accuracy, the fastest one that clears the target.`:
+    `Intervals are still wide (up to ±${Math.round(widest*100)} points). The pick can change until the run finishes.`;
+
+  // decision table
+  const sorted=rows.slice().sort((a,b)=>(b.st.acc??-1)-(a.st.acc??-1)||(a.st.p50??1e9)-(b.st.p50??1e9));
+  const base=PAST[S.base];
+  const trs=sorted.map(r=>{const st=r.st,isRec=rec&&r.key===rec.key,isTie=!isRec&&tied.includes(r);
+    const dAcc=st.acc==null?null:st.acc-base.acc[r.key], dP50=st.p50==null?null:st.p50/base.p50[r.key]-1;
+    const status=st.n===48?"":r.flying?`<span class="tag">running</span>`:st.n?`<span class="tag">${st.n}/48</span>`:`<span class="tag">queued</span>`;
+    return `<tr class="${isRec?"rec":""}"><td><span class="who"><span class="dot" style="background:${col(r.m.id)}"></span>${r.m.label}<span class="sub" style="font-weight:500">· ${r.o.label}</span>
+      ${isRec?`<span class="tag rec">${finished?"pick":"leading"}</span>`:isTie?`<span class="tag tie">tied</span>`:""} ${status}</span></td>
+      <td class="n">${pc(st.acc)}</td><td>${ciBar(st,col(r.m.id))}</td><td class="n">${pc(st.all3)}</td>
+      <td class="n">${ms(st.p50)}</td><td class="n">${ms(st.p95)}</td><td class="n">${kfmt(st.tok)}</td><td class="n">${st.errors||"–"}</td>
+      <td>${spark([...PAST.map(p=>p.acc[r.key]),st.acc??FINAL[r.key].acc],col(r.m.id))}</td>
+      <td class="n">${dAcc==null?"–":`<span class="${Math.abs(dAcc)<.02?"":dAcc>0?"up":"down"}">${dAcc>0?"+":""}${Math.round(dAcc*100)} pts</span>`}<br><span class="${dP50==null||Math.abs(dP50)<.05?"sub":dP50<0?"up":"down"}">${dP50==null?"":(dP50>0?"+":"")+Math.round(dP50*100)+"% time"}</span></td></tr>`}).join("");
+
+  // scatter: accuracy (with CI) vs median latency
+  const W=620,H=300,P={l:46,r:16,t:12,b:38},pts=rows.filter(r=>r.st.n);
+  const maxX=Math.max(4000,...pts.map(r=>r.st.p50))*1.12,lo=.5;
+  const X=v=>P.l+v/maxX*(W-P.l-P.r),Y=v=>P.t+(1-(v-lo)/(1-lo))*(H-P.t-P.b);
+  let g="";for(let s=0;s<=maxX;s+=1000)g+=`<line x1="${X(s)}" x2="${X(s)}" y1="${P.t}" y2="${H-P.b}" style="stroke:var(--line)"/><text x="${X(s)}" y="${H-P.b+15}" text-anchor="middle">${s/1000}s</text>`;
+  for(let a=.5;a<=1.001;a+=.1)g+=`<line x1="${P.l}" x2="${W-P.r}" y1="${Y(a)}" y2="${Y(a)}" style="stroke:var(--line)"/><text x="${P.l-6}" y="${Y(a)+4}" text-anchor="end">${Math.round(a*100)}%</text>`;
+  g+=`<line x1="${P.l}" x2="${W-P.r}" y1="${Y(S.target)}" y2="${Y(S.target)}" style="stroke:var(--muted);stroke-dasharray:4 4"/><text x="${W-P.r}" y="${Y(S.target)-5}" text-anchor="end">target ${pc(S.target)}</text>`;
+  g+=pts.map(r=>{const x=X(r.st.p50);return `<line x1="${x}" x2="${x}" y1="${Y(Math.max(lo,r.st.hi))}" y2="${Y(Math.max(lo,r.st.lo))}" style="stroke:${col(r.m.id)};stroke-width:2;opacity:.5"/>
+    <circle cx="${x}" cy="${Y(Math.max(lo,r.st.acc))}" r="10" style="fill:${col(r.m.id)};stroke:${rec&&r.key===rec.key?"var(--hi-ink)":"var(--panel)"};stroke-width:${rec&&r.key===rec.key?3:2}"><title>${label(r.key)}: ${pc(r.st.acc)} (${pc(r.st.lo)}–${pc(r.st.hi)}), ${ms(r.st.p50)}</title></circle>
+    <text x="${x}" y="${Y(Math.max(lo,r.st.acc))+4}" text-anchor="middle" style="fill:var(--panel);font-weight:600">${r.o.s}</text>`}).join("");
+  g+=`<text x="${(W+P.l)/2}" y="${H-4}" text-anchor="middle">median time per answer →</text>`;
+
+  // where the time goes
+  const maxT=Math.max(1,...pts.map(r=>r.st.stage.wait+r.st.stage.think+r.st.stage.tools+r.st.stage.stream));
+  const stack=COMBOS.map(cb=>rows.find(r=>r.key===cb.key)).filter(r=>r.st.n).map(r=>{const s=r.st.stage,seg=(v,c,t)=>`<span style="width:${v/maxT*100}%;background:${c}" title="${t} ${ms(v)}"></span>`;
+    return `<div style="display:grid;grid-template-columns:118px minmax(0,1fr) 54px;gap:8px;align-items:center;font-size:12px"><span class="mono">${r.m.id} · ${r.o.s}</span>
+      <span class="stack">${seg(s.wait,"var(--muted)","first token")}${seg(s.think,col(r.m.id),"thinking")}${seg(s.tools,"var(--pass)","tools + extra calls")}${seg(s.stream,"var(--fail)","answer")}</span><span class="num" style="text-align:right">${ms(s.wait+s.think+s.tools+s.stream)}</span></div>`}).join("");
+
+  // per-question heatmap with drill-down
+  const head=COMBOS.map(cb=>`<span class="h"><span class="dot" style="background:${col(cb.m.id)}"></span><br>${cb.m.id}<br>${cb.o.s}</span>`).join("");
+  const rowsFor=cap=>CASES.filter(c=>c.cap===cap).map(c=>`<span class="rl" title="${c.id}">${c.id}</span>`+COMBOS.map(cb=>{
+    const rs=done.filter(r=>r.combo===cb.key&&r.case===c.id),n=rs.filter(r=>r.pass).length,key=cb.key+"|"+c.id;
+    return rs.length?`<button class="cell c${Math.round(n/rs.length*3)}" data-cell="${key}" aria-pressed="${S.sel===key}" aria-label="${label(cb.key)}, ${c.id}: ${n} of ${rs.length}">${n}/${rs.length}</button>`:`<span class="cell cn">·</span>`}).join("")).join("");
+  let drill=`<p class="note">Click a cell to see each repeat: the answer, what was expected, the SQL it ran and its tool path.</p>`;
+  if(S.sel){const[ck,cid]=S.sel.split("|");const rs=done.filter(r=>r.combo===ck&&r.case===cid).sort((a,b)=>a.rep-b.rep);
+    drill=`<div class="phead"><h2>${label(ck)} · <span class="mono">${cid}</span></h2><span class="sub">expected in first paragraph: ${esc(rs[0]?.expected||"")}</span></div><div class="drill">`+rs.map(r=>`<div class="rep">
+      <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap"><span class="res ${r.pass?"p":"f"}">${r.error?"ERROR":r.pass?"PASS":"FAIL"}</span><span class="mono">repeat ${r.rep+1}</span><span class="sub">${ms(r.total)} · ${r.calls} model calls${r.retries?` · ${r.retries} SQL retr${r.retries>1?"ies":"y"}`:""}</span></div>
+      <div>${r.error?`<span class="down">${esc(r.error)}</span>`:esc(r.answer)}</div>
+      ${r.sql.length?`<div class="code">${esc(r.sql.at(-1))}</div>`:""}
+      <div class="seq">${r.tools.length?r.tools.map(t=>`<code>${t}</code>`).join(" → "):"<code>answered from snapshot</code>"}</div></div>`).join("")+`</div>`}
+
+  const flight=SIM.flight.map(f=>{const r=RUNS[f.i];return `<div class="fl"><span><span class="dot" style="background:${col(r.model)};margin-right:6px"></span>${r.mode} · ${r.case}</span><span class="num">${f.back&&SIM.now-f.start<f.back?"429 wait":ms(SIM.now-f.start)}</span></div>`}).join("");
+
+  $("#page").innerHTML=`
+    <section class="panel s12" aria-live="polite">
+      <div class="verdict">${verdict}</div>
+      <div class="phead"><span class="note">${verdictNote}</span>
+        <span style="display:flex;gap:4px;align-items:center" role="group" aria-label="Accuracy target"><span class="sub">Target</span>
+        ${[.85,.9,.95].map(t=>`<button class="chip" data-target="${t}" aria-pressed="${S.target===t}">${pc(t)}</button>`).join("")}</span></div>
+      ${finished?"":`<div><div class="sub" style="margin-bottom:6px">In flight (${SIM.flight.length} of ${CONCURRENCY}, max ${PER_MODEL} per model, order shuffled across setups)</div><div class="flight">${flight}</div></div>`}
+    </section>
+
+    <section class="panel s12">
+      <div class="phead"><h2>Setups</h2>
+        <span style="display:flex;gap:4px;align-items:center" role="group" aria-label="Baseline run"><span class="sub">Compare with</span>
+        ${PAST.map((p,i)=>`<button class="chip" data-base="${i}" aria-pressed="${S.base===i}">${p.date}</button>`).join("")}</span></div>
+      <div class="scroll"><table style="min-width:1040px"><thead><tr><th>Setup</th><th class="n">Accuracy</th><th>95% interval <span style="font-weight:400">(50–100%, dashed = target)</span></th><th class="n">Right 3/3</th><th class="n">p50</th><th class="n">p95</th><th class="n">Tokens / answer</th><th class="n">Errors</th><th>Accuracy, last 5 runs</th><th class="n">vs ${base.date}</th></tr></thead><tbody>${trs}</tbody></table></div>
+      <p class="note">48 runs per setup (16 questions × 3 repeats), so intervals stay several points wide. "Right 3/3" is the share of questions answered correctly in every repeat. It shows how consistent each setup is.</p>
+    </section>
+
+    <section class="panel s7"><div class="phead"><h2>Accuracy vs speed</h2><div class="legend">${MODELS.map(m=>`<span><i style="background:${col(m.id)};border-radius:50%"></i>${m.label}</span>`).join("")}<span>T typed · S SQL · D discovery</span></div></div>
+      <svg viewBox="0 0 ${W} ${H}" width="100%" role="img" aria-label="Accuracy with 95% intervals against median time, one point per setup">${g}</svg>
+      <p class="note">Vertical lines are 95% intervals. Overlapping lines mean the accuracy difference isn't settled by this run.</p></section>
+    <section class="panel s5"><div class="phead"><h2>Where the time goes</h2><span class="sub">median per answer</span></div><div style="display:grid;gap:8px">${stack}</div>
+      <div class="legend"><span><i style="background:var(--muted)"></i>first token</span><span><i style="background:var(--sonnet)"></i>thinking</span><span><i style="background:var(--pass)"></i>tools + extra calls</span><span><i style="background:var(--fail)"></i>answer</span></div>
+      <p class="note">Tools + extra calls is the cost of discovery. Thinking is the cost of effort. Compare against a <span class="mono">haiku@off</span> run.</p></section>
+
+    <section class="panel s12"><div class="phead"><h2>Per question</h2><div class="legend"><span><i style="background:var(--pass)"></i>3/3</span><span><i style="background:var(--pass-soft)"></i>2/3</span><span><i style="background:var(--fail-soft)"></i>1/3</span><span><i style="background:var(--fail)"></i>0/3 correct</span></div></div>
+      <div class="scroll"><div class="hm" style="grid-template-columns:200px repeat(${COMBOS.length},minmax(52px,1fr))"><span></span>${head}
+        <span class="grp">Typed tools can answer (10)</span>${rowsFor(true)}<span class="grp">Needs SQL (6)</span>${rowsFor(false)}</div></div>
+      ${drill}</section>`;
+}
+
+function tick(){if(!S.playing)return;advance(120*S.speed);if(SIM.done.length===TOTAL){S.playing=false;clearInterval(timer);timer=null}render()}
+$("#play").onclick=()=>{if(SIM.done.length===TOTAL)resetSim();S.playing=!S.playing;if(S.playing&&!timer)timer=setInterval(tick,120);if(!S.playing){clearInterval(timer);timer=null}render()};
+$("#jump").onclick=()=>{advance(1e9);S.playing=false;clearInterval(timer);timer=null;render()};
+$("#reset").onclick=()=>{resetSim();S.playing=false;S.sel=null;clearInterval(timer);timer=null;render()};
+document.addEventListener("click",e=>{const b=e.target.closest("button");if(!b)return;const d=b.dataset;
+  if(d.speed)S.speed=+d.speed;else if(d.target)S.target=+d.target;else if(d.base)S.base=+d.base;else if(d.cell)S.sel=S.sel===d.cell?null:d.cell;else return;render()});
+render();
+</script>

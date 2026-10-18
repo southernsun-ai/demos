@@ -23,3 +23,6 @@ docs/plans/
 # experiment output is regenerated from a run, not committed
 results/*.jsonl
 results/*.labels.jsonl
+
+# large data files: regenerate with make setup or download separately
+**/mod_channel_15k.tsv

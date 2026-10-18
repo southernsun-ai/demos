@@ -1,0 +1,155 @@
+# Mod Log Admin Chat
+
+> A PydanticAI v2 agent that lets Discord admins ask plain-English questions about moderator
+> activity. It answers from a 15,000-row TSV snapshot loaded into in-memory DuckDB. The project
+> compares three data-access modes (typed tools, SQL with the schema given, SQL with schema
+> discovery) across Claude Haiku / Sonnet / Opus 5.5 with a deterministic eval. The core is built
+> and tested offline. The next work is a live bake-off dashboard and a concurrent eval runner (spec below).
+
+Read this file first, then `AGENTS.md` (runbook and rules) and `README.md` (design rationale).
+Everything below matches the code as shipped. Where it describes planned work, it says "PLANNED".
+
+## Quick start
+
+- `make setup`: create `.venv` and install `requirements.txt` (Python 3.11+).
+- `cp .env.example .env` and set `ANTHROPIC_API_KEY`. `make` loads `.env`.
+- `make test`: 31 offline tests. They must pass. Real model calls are blocked in tests.
+- `make smoke`: offline eval with scripted fake models. Free; checks the harness only.
+- `make serve`: chat UI at http://localhost:8000. Needs the key.
+- `make eval-quick` / `make eval`: model × mode bake-off (144 / 432 agent runs). Needs the key. Confirm with the user before running.
+- Variables for `make eval`: `MODELS=haiku,sonnet,opus,haiku@off  MODES=typed,sql,discover  REPEATS=3  EFFORT=medium  CASES=id1,id2`
+
+## Files
+
+- [config.py](config.py): the only place to set models and effort. Aliases `haiku|sonnet|opus` map to `anthropic:claude-{x}-5-5`. Also holds `MODES`, the `MODE_LIMITS` usage ceilings, and `MAX_TOKENS=4096`.
+- [store.py](store.py): loads the TSV into DuckDB once. Holds the typed queries (`find_events`, `aggregate`), the guarded `run_sql`, `list_tables`, `describe_table`, `schema_ddl`, and `snapshot_summary`.
+- [agent.py](agent.py): `FunctionToolset`s (`typed_tools`, `sql_tools`, `discovery_tools`), the instructions for each mode, and `build_agent(mode, store, effort=..., include_summary=..., model=...)`.
+- [runner.py](runner.py): `stream_turn()` / `run_turn()`, one streamed agent turn with timing (`TurnMetrics`). Shared by the server and the eval so the metrics are defined in one place.
+- [server.py](server.py): FastAPI. `POST /chat {message, conversation_id?, mode, model?, effort?}` returns SSE events `start|status|sql|delta|error|done`. `GET /` serves `index.html`.
+- [index.html](index.html): minimal chat UI with mode and model pickers. Shows timings under each answer.
+- [eval_cases.py](eval_cases.py): 16 questions, ground truth computed in plain Python from the TSV, `REFERENCE_SQL`, the grader (`grade`, `lead`), the `AnswerCorrect` evaluator, and `build_dataset()` (a pydantic_evals `Dataset`).
+- [eval_modes.py](eval_modes.py): the model × mode runner on pydantic_evals. Writes `results/<ts>/runs.jsonl` and `report.md`.
+- [bench.py](bench.py): client-side p50/p95 latency benchmark against a running server.
+- [fake_model.py](fake_model.py): offline `FunctionModel`s. `offline_model_for(mode, cases)` is an oracle that walks the real tool path.
+- [conftest.py](conftest.py), [test_agent.py](test_agent.py), [test_sql_modes.py](test_sql_modes.py): offline tests, including wire-request checks for each model.
+- [design/dashboard_mock.html](design/dashboard_mock.html): approved, playable mock of the PLANNED dashboard (simulated data). Open it in a browser.
+- [mod_channel_15k.tsv](mod_channel_15k.tsv): the data.
+
+## Data
+
+One table, `events`, with 15,000 rows covering 2026-08-01 to 2026-10-17 UTC. Columns: `message_id, channel_id, channel_name,
+author_id, author_username, ts (TIMESTAMP), message_type, action_taken, reason, mod_id, mod_username,
+target_user_id, content, attachment_count (INT), edited_at (TIMESTAMP)`.
+- `action_taken` is one of `none, warn, mute, timeout, kick, delete, ban`. A "mod action" is any value except `none`.
+- When `action_taken='none'`, the columns `reason`, `mod_id`, `mod_username` and `target_user_id` are NULL.
+- Deleted messages have `content = "[content removed]"`.
+- In the TSV, newlines and tabs in content are escaped as `\n` and `\t`. `store.py` unescapes them on load.
+- Moderators: Doug, Ines, Kestrel, Mara. Channels: #general, #off-topic, #mod-channel, #games.
+
+## The three modes
+
+- `typed`: the snapshot summary is in the instructions. Tools: `find_events(filters, limit)` and `aggregate_events(group_by, filters, top_n)`, with Pydantic `EventFilter` and Literal enums. Usually 1–2 model calls. It can't answer questions about edits, attachments, hour of day, COUNT DISTINCT, or event sequences.
+- `sql`: the table DDL and column notes are in the instructions. One tool, `run_sql(sql)`. Usually 2 calls, plus 1 per SQL error.
+- `discover`: no schema is given. Tools: `list_tables`, `describe_table`, `run_sql`. Usually 3–4 calls. `describe_table` lists every value for columns with 20 or fewer distinct values.
+- The SQL guard in `store.run_sql`:
+  - exactly one statement, of type SELECT (checked with `duckdb.extract_statements`)
+  - `enable_external_access=false` and `lock_configuration=true`, set on load, so the model can't read files or the network
+  - a 5 s timeout through `cursor.interrupt`
+  - output capped at 50 rows / 6,000 characters
+  - errors raise `ModelRetry`, so the model can fix its query (up to 3 retries)
+  - Never weaken this guard.
+
+## Models and effort
+
+- `thinking='medium'` on all Claude 5.5 models sends `thinking:{type:"adaptive"}` plus `output_config:{effort:"medium"}`. The test `test_medium_effort_wire_request` pins this.
+- Sonnet and Opus 5.5 always think. `@off` is ignored for them. Only Haiku 5.5 can turn thinking off (`haiku@off`), which makes it the speed baseline.
+- No `temperature` is sent; the 5.5 models manage sampling themselves.
+- `max_tokens=4096`, because thinking tokens count toward it.
+- Caching uses `Caching("1h")` on the static instructions and tool schemas, and history is cached as well. Instructions are static per snapshot; don't put anything per-request in them, because that breaks the cache.
+- Agents are model-agnostic. Pass `model=` per run. Build one agent per (mode, effort).
+
+## PydanticAI v2 conventions used (keep them)
+
+- `FunctionToolset`s composed with `toolsets=[...]`.
+- `capabilities=[Thinking(effort), Caching(...)]` instead of `anthropic_*` settings.
+- `instructions=`, `defer_model_check=True`.
+- `run_stream_events` is an async context manager. The stream ends with `AgentRunResultEvent`. `result.usage` is a property.
+- Tests: set `models.ALLOW_MODEL_REQUESTS=False` and use `agent.override(model=FunctionModel(...))`. `override_allow_model_requests(True)` is allowed only around a mocked `httpx2` transport (the Anthropic SDK uses `httpx2`).
+- Evals: `pydantic_evals.Dataset(name=...)`, a custom `Evaluator`, and `increment_eval_metric` / `set_eval_attribute` inside the task.
+
+## Eval semantics
+
+- 16 questions: 10 the typed tools can answer and 6 that need SQL. The ground truth values are:
+  - total_bans 69
+  - top_banner Mara 22
+  - mara_oct_bans 6
+  - top_channel_actions #off-topic 367
+  - top_offender grumpy_r178 10
+  - kicks_week 9 (2026-09-07..13 inclusive)
+  - timeout_reason "flooding the chat"
+  - sept_warner Mara 44
+  - ines_games 81
+  - grumpy_last_timeout "repeated self-promo links" by Kestrel
+  - edited_count 1089
+  - with_attachments 1300
+  - peak_hour 19:00 UTC with 72
+  - distinct_actioned 480
+  - warn_then_ban 15
+  - edited_within_5m 17
+- Strict grading: every expected value must appear in the answer's first paragraph. Numbers match as whole tokens, and thousands separators are ignored. "Loose" means the value appears anywhere in the answer. An errored run counts as wrong.
+- Don't edit the ground truth or the grader to make a model pass. `make test` cross-checks the ground truth against independent SQL.
+- Metrics per run (`runner.TurnMetrics`):
+  - `first_thinking_ms`: first thinking token
+  - `first_tool_ms`: the model starts a tool call
+  - `ttft_ms`: first visible answer token
+  - `total_ms`
+  - `model_requests`, `tool_calls`, `retries` (SQL errors and bad tool arguments)
+  - `input_tokens`, `cache_read_tokens`, `cache_write_tokens`, `output_tokens` (includes thinking)
+- `runs.jsonl` row fields today: `model` (label like `sonnet@medium`), `mode`, `case`, `typed_capable`, `correct`, `correct_loose`, `answer`, the metric fields above, `tools`, `sql`, `error`.
+
+## Status
+
+- Built and verified offline: all three modes, the server, the chat UI, the model/effort config, the eval runner, and 31 tests. A fresh unzip, `make setup && make test && make smoke` passes.
+- Not yet measured: any real-model accuracy or latency. No API key was available while building.
+
+## PLANNED 1: concurrent eval runner (replace the sequential loop in eval_modes.py)
+
+- Run all (model, mode, case, repeat) jobs in one shuffled queue, so that API load drift affects every setup equally.
+- Limits: a global semaphore of 8 (`--concurrency`) and a per-model semaphore of 4 (`--per-model`), because rate limits are per model.
+- Start timing after both semaphores are acquired. Queue wait is never counted as latency.
+- On HTTP 429 or overloaded errors, back off and retry. Count these as `rate_limit_retries`, separate from latency and from `retries`. Leave `total_ms` as the successful attempt only, or record `backoff_ms` separately.
+- Warm the cache once per (model, mode) before the queue starts.
+- Add these fields to each `runs.jsonl` row: `repeat`, `started_at`, `finished_at` (ISO), `rate_limit_retries`, `backoff_ms`, `effort`, `run_id`.
+- Keep pydantic_evals as the dataset, evaluator and metrics layer. Building a `Dataset` per (model, mode) and running those concurrently is acceptable, as long as the global and per-model limits still apply.
+- Append rows to `runs.jsonl` as each job finishes, so the dashboard can tail the file. Write `results/<ts>/meta.json` with the config (`models`, `modes`, `repeats`, `effort`, `concurrency`, `total_jobs`, `git_sha`, `started_at`) and `status: running|finished`.
+
+## PLANNED 2: bake-off dashboard (`make dashboard`; match design/dashboard_mock.html)
+
+- Serve it from FastAPI on localhost, either in `server.py` under `/bakeoff` or as a separate `dashboard.py` app. Read `results/*/meta.json` and `runs.jsonl`. Push live updates over SSE (`/bakeoff/stream`), driven by new lines in `runs.jsonl` plus the in-flight state from the runner (a small `inflight.json` or an in-process queue).
+- **The page answers one question: which setup should ship.** Never show accuracy pooled across setups.
+- Sticky run bar: progress `done/total`, number in flight, elapsed time, ETA (from throughput), and the rate-limit retry count.
+- Verdict line, with a selectable target accuracy (85 / 90 / 95%). The rule:
+  - only setups with at least 12 finished runs count
+  - best = the highest accuracy
+  - tied = every setup whose Wilson 95% upper bound is at or above best's accuracy
+  - pick the tied setup that clears the target with the lowest p50 total time; if none clears the target, pick the fastest tied setup
+  - Say "leaning" while the run is going and "pick" when it's finished. Name the slower tied alternative and how many times slower it is.
+- In-flight list (running only): each in-flight job with its elapsed time, or "429 wait".
+- Setups table, one row per model × mode, sorted by accuracy then p50:
+  - accuracy, plus a Wilson 95% interval bar on a 50–100% scale with a dashed line at the target
+  - "Right 3/3": the share of questions correct in every repeat
+  - p50 and p95 `total_ms`, tokens per answer, errors
+  - a sparkline of accuracy over the last 5 runs, from earlier `results/*`
+  - the change against a baseline run picked from earlier `results/*`: accuracy in points, p50 in percent
+  - status tags: queued, running, `n/48`, tied, leading/pick
+- Accuracy vs median-time scatter: one point per setup, colored by model, letter T/S/D for the mode, a vertical 95% interval line on each point, and the target line.
+- "Where the time goes": a stacked bar per setup of medians: first token (`first_thinking_ms`), thinking, tools + extra calls, answer streaming (`total_ms - ttft_ms`). For a run with no thinking, use `ttft_ms` for the first-token segment.
+- Per-question heatmap: rows grouped as "typed tools can answer" / "needs SQL", one column per setup, and cells showing passes out of repeats. Clicking a cell shows each repeat: PASS/FAIL/ERROR, the answer, the expected value, the last SQL, the tool path, time, model calls and retries.
+- Style: theme-aware light and dark. Use blue/orange for pass/fail, not red/green. Keep the mock's restrained layout and no pooled metrics.
+
+## Rules for agents
+
+- Change models and effort only through `config.py`, env vars or CLI flags.
+- Run `make test` and `make smoke` before anything that costs money. Tell the user the run count and confirm before `make eval`.
+- Never print or commit the API key or `.env`.
+- Keep tests offline. New tests use `FunctionModel` or `TestModel` through `agent.override`.
